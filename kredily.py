@@ -15,7 +15,7 @@ LOGIN_URL = os.getenv("KREDILY_URL")
 BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
 
-# XPaths based on your screenshot - adjust only if site changes
+# XPaths based on screenshot
 EMAIL_XPATH = "//input[@placeholder='Email Address / Mobile Number']"
 PASSWORD_XPATH = "//input[@placeholder='Password']"
 LOGIN_BTN_XPATH = "//button[contains(text(),'Sign In')]"
@@ -23,7 +23,7 @@ CLOCKIN_XPATH = "//button[contains(text(),'WEB CLOCK-IN')]"
 CLOCKOUT_XPATH = "//button[contains(text(),'WEB CLOCK-OUT')]"
 
 def notify(msg):
-    # simple Telegram notify
+    """Send Telegram notification."""
     try:
         url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
         data = {"chat_id": CHAT_ID, "text": msg, "parse_mode": "Markdown"}
