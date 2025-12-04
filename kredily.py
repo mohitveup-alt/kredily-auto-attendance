@@ -1,13 +1,14 @@
 # kredily.py
-# Cloud-run Selenium + Telegram notifier for Kredily (designed for GitHub Actions)
+# Cloud-run Selenium + Telegram notifier for Kredily (GitHub Actions Compatible)
 
 import time
 import os
 import requests
 from selenium import webdriver
 from selenium.webdriver.common.by import By
-from webdriver_manager.chrome import ChromeDriverManager
 from selenium.webdriver.chrome.options import Options
+from selenium.webdriver.chrome.service import Service
+from webdriver_manager.chrome import ChromeDriverManager
 
 EMAIL = os.getenv("KREDILY_EMAIL")
 PASSWORD = os.getenv("KREDILY_PASSWORD")
@@ -22,25 +23,26 @@ LOGIN_BTN_XPATH = "//button[contains(text(),'Sign In')]"
 CLOCKIN_XPATH = "//button[contains(text(),'WEB CLOCK-IN')]"
 CLOCKOUT_XPATH = "//button[contains(text(),'WEB CLOCK-OUT')]"
 
+
 def notify(msg):
-    """Send Telegram notification."""
+    """Send telegram notification"""
     try:
         url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
         data = {"chat_id": CHAT_ID, "text": msg, "parse_mode": "Markdown"}
-        requests.post(url, data=data, timeout=20)
+        requests.post(url, data=data, timeout=10)
     except Exception as e:
         print("Telegram notification failed:", e)
+
 
 def run_task():
     chrome_options = Options()
     chrome_options.add_argument("--headless=new")
-    chrome_options.add_argument("--no-sandbox")
     chrome_options.add_argument("--disable-dev-shm-usage")
+    chrome_options.add_argument("--no-sandbox")
 
-from selenium.webdriver.chrome.service import Service
-
-service = Service(ChromeDriverManager().install())
-driver = webdriver.Chrome(service=service, options=chrome_options)
+    # Proper Selenium 4 driver init
+    service = Service(ChromeDriverManager().install())
+    driver = webdriver.Chrome(service=service, options=chrome_options)
 
     try:
         driver.get(LOGIN_URL)
@@ -56,25 +58,27 @@ driver = webdriver.Chrome(service=service, options=chrome_options)
         try:
             btn = driver.find_element(By.XPATH, CLOCKIN_XPATH)
             btn.click()
-            notify("🟢 *Clock-In Successful* at your Kredily account.")
+            notify("🟢 *Clock-In Successful*")
             print("Clock-In clicked")
-        except Exception:
-            print("Clock-in button not present")
+        except:
+            print("Clock-In not available")
 
         # Try Clock-Out
         try:
             btn = driver.find_element(By.XPATH, CLOCKOUT_XPATH)
             btn.click()
-            notify("🔵 *Clock-Out Successful* at your Kredily account.")
+            notify("🔵 *Clock-Out Successful*")
             print("Clock-Out clicked")
-        except Exception:
-            print("Clock-out button not present")
+        except:
+            print("Clock-Out not available")
 
     except Exception as e:
-        notify(f"⚠️ Kredily automation failed: {e}")
+        notify(f"⚠️ Error: {e}")
         print("Error:", e)
+
     finally:
         driver.quit()
+
 
 if __name__ == "__main__":
     run_task()
