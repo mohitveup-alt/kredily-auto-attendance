@@ -1,0 +1,33 @@
+name: Kredily Attendance Automation
+
+on:
+  schedule:
+    - cron: "10 5 * * 1-6"   # 10:40 AM IST -> 05:10 UTC (runs Mon-Sat)
+    - cron: "30 12 * * 1-6"  # 6:00 PM IST -> 12:30 UTC (runs Mon-Sat)
+  workflow_dispatch:
+
+jobs:
+  attendance:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repo
+        uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: "3.10"
+
+      - name: Install Dependencies
+        run: |
+          pip install selenium webdriver-manager requests
+
+      - name: Run Kredily Attendance Script
+        env:
+          KREDILY_EMAIL: ${{ secrets.KREDILY_EMAIL }}
+          KREDILY_PASSWORD: ${{ secrets.KREDILY_PASSWORD }}
+          KREDILY_URL: ${{ secrets.KREDILY_URL }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: python3 kredily.py
