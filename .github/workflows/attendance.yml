@@ -1,17 +1,17 @@
-name: Kredily Attendance Automation
+name: Kredily Auto Attendance (Playwright)
 
 on:
-  schedule:
-    - cron: "10 5 * * 1-6"   # 10:40 AM IST -> 05:10 UTC (runs Mon-Sat)
-    - cron: "30 12 * * 1-6"  # 6:00 PM IST -> 12:30 UTC (runs Mon-Sat)
   workflow_dispatch:
+  schedule:
+    - cron: "40 5 * * 1-6"   # 10:40 AM IST -> check-in (Mon-Sat)
+    - cron: "0 12 * * 1-6"   # 6:00 PM IST -> check-out (Mon-Sat)
 
 jobs:
-  attendance:
+  clockin:
+    if: github.event_name == 'workflow_dispatch' || github.event.schedule == '40 5 * * 1-6' || false
     runs-on: ubuntu-latest
-
     steps:
-      - name: Checkout Repo
+      - name: Checkout
         uses: actions/checkout@v3
 
       - name: Set up Python
@@ -19,15 +19,41 @@ jobs:
         with:
           python-version: "3.10"
 
-      - name: Install Dependencies
+      - name: Install Playwright
         run: |
-          pip install selenium webdriver-manager requests
+          pip install playwright requests
+          playwright install --with-deps
 
-      - name: Run Kredily Attendance Script
+      - name: Run Clock-In
         env:
-          KREDILY_EMAIL: ${{ secrets.KREDILY_EMAIL }}
-          KREDILY_PASSWORD: ${{ secrets.KREDILY_PASSWORD }}
-          KREDILY_URL: ${{ secrets.KREDILY_URL }}
+          KREDILY_USER: ${{ secrets.KREDILY_USER }}
+          KREDILY_PASS: ${{ secrets.KREDILY_PASS }}
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          ACTION: "clockin"
+        run: python3 kredily.py
+
+  clockout:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: "3.10"
+
+      - name: Install Playwright
+        run: |
+          pip install playwright requests
+          playwright install --with-deps
+
+      - name: Run Clock-Out
+        env:
+          KREDILY_USER: ${{ secrets.KREDILY_USER }}
+          KREDILY_PASS: ${{ secrets.KREDILY_PASS }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          ACTION: "clockout"
         run: python3 kredily.py
