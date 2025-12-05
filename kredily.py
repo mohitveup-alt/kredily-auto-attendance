@@ -1,84 +1,62 @@
-# kredily.py
-# Cloud-run Selenium + Telegram notifier for Kredily (GitHub Actions Compatible)
-
-import time
-import os
-import requests
 from selenium import webdriver
-from selenium.webdriver.common.by import By
-from selenium.webdriver.chrome.options import Options
-from selenium.webdriver.chrome.service import Service
 from webdriver_manager.chrome import ChromeDriverManager
-
-EMAIL = os.getenv("KREDILY_EMAIL")
-PASSWORD = os.getenv("KREDILY_PASSWORD")
-LOGIN_URL = os.getenv("KREDILY_URL")
-BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
-CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
-
-# XPaths based on screenshot
-EMAIL_XPATH = "//input[@placeholder='Email Address / Mobile Number']"
-PASSWORD_XPATH = "//input[@placeholder='Password']"
-LOGIN_BTN_XPATH = "//button[contains(text(),'Sign In')]"
-CLOCKIN_XPATH = "//button[contains(text(),'WEB CLOCK-IN')]"
-CLOCKOUT_XPATH = "//button[contains(text(),'WEB CLOCK-OUT')]"
-
-
-def notify(msg):
-    """Send telegram notification"""
-    try:
-        url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
-        data = {"chat_id": CHAT_ID, "text": msg, "parse_mode": "Markdown"}
-        requests.post(url, data=data, timeout=10)
-    except Exception as e:
-        print("Telegram notification failed:", e)
-
+from selenium.webdriver.common.by import By
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
+from selenium.webdriver.chrome.options import Options
+import time
 
 def run_task():
+
     chrome_options = Options()
     chrome_options.add_argument("--headless=new")
-    chrome_options.add_argument("--disable-dev-shm-usage")
     chrome_options.add_argument("--no-sandbox")
+    chrome_options.add_argument("--disable-dev-shm-usage")
 
-    # Proper Selenium 4 driver init
-    service = Service(ChromeDriverManager().install())
-    driver = webdriver.Chrome(service=service, options=chrome_options)
+    driver = webdriver.Chrome(ChromeDriverManager().install(), options=chrome_options)
+
+    driver.get("https://app.kredily.com/login")
+
+    # --- LOGIN ---
+    email = WebDriverWait(driver, 20).until(
+        EC.presence_of_element_located((By.XPATH, "//input[@id='username']"))
+    )
+    email.send_keys("YOUR_MOBILE_OR_EMAIL")
+
+    password = driver.find_element(By.XPATH, "//input[@id='password']")
+    password.send_keys("YOUR_PASSWORD")
+
+    login_btn = driver.find_element(By.XPATH, "//button[contains(text(),'Sign In')]")
+    login_btn.click()
+
+    time.sleep(3)
+
+    # --- HANDLE RANDOM POP-UP ---
+    try:
+        close_popup = WebDriverWait(driver, 5).until(
+            EC.element_to_be_clickable((By.XPATH, "//button[contains(@class,'close')]"))
+        )
+        close_popup.click()
+    except:
+        pass
 
     try:
-        driver.get(LOGIN_URL)
-        time.sleep(3)
+        yes_btn = WebDriverWait(driver, 5).until(
+            EC.element_to_be_clickable((By.XPATH, "//button[contains(text(),'Yes')]"))
+        )
+        yes_btn.click()
+    except:
+        pass
 
-        # Login
-        driver.find_element(By.XPATH, EMAIL_XPATH).send_keys(EMAIL)
-        driver.find_element(By.XPATH, PASSWORD_XPATH).send_keys(PASSWORD)
-        driver.find_element(By.XPATH, LOGIN_BTN_XPATH).click()
-        time.sleep(6)
+    # --- CLOCK-IN ---
+    clockin_btn = WebDriverWait(driver, 20).until(
+        EC.element_to_be_clickable((By.XPATH, "//button[contains(text(),'WEB CLOCK-IN')]"))
+    )
+    clockin_btn.click()
 
-        # Try Clock-In
-        try:
-            btn = driver.find_element(By.XPATH, CLOCKIN_XPATH)
-            btn.click()
-            notify("🟢 *Clock-In Successful*")
-            print("Clock-In clicked")
-        except:
-            print("Clock-In not available")
+    print("Clock-in Done Successfully ✔")
 
-        # Try Clock-Out
-        try:
-            btn = driver.find_element(By.XPATH, CLOCKOUT_XPATH)
-            btn.click()
-            notify("🔵 *Clock-Out Successful*")
-            print("Clock-Out clicked")
-        except:
-            print("Clock-Out not available")
-
-    except Exception as e:
-        notify(f"⚠️ Error: {e}")
-        print("Error:", e)
-
-    finally:
-        driver.quit()
-
+    driver.quit()
 
 if __name__ == "__main__":
     run_task()
