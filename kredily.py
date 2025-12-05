@@ -1,89 +1,44 @@
-# kredily.py
-# Playwright script for Kredily clock-in / clock-out + Telegram notifications
-
 import os
 import time
-import requests
 from playwright.sync_api import sync_playwright
 
-KREDILY_USER = os.getenv("KREDILY_USER")
-KREDILY_PASS = os.getenv("KREDILY_PASS")
-TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")   # optional
-TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")       # optional
+def run_once(action):
+    print("Opening login page...")
 
-LOGIN_URL = "https://app.kredily.com/login"
-
-def telegram_notify(text):
-    if not TELEGRAM_BOT_TOKEN or not TELEGRAM_CHAT_ID:
-        return
-    try:
-        url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
-        requests.post(url, data={"chat_id": TELEGRAM_CHAT_ID, "text": text})
-    except Exception as e:
-        print("Telegram notify failed:", e)
-
-def run_once(action="clockin"):
     with sync_playwright() as p:
         browser = p.chromium.launch(headless=True)
-        context = browser.new_context()
-        page = context.new_page()
+        page = browser.new_page()
 
-        print("Opening login page...")
-        page.goto(LOGIN_URL, timeout=60000)
+        page.goto("https://app.kredily.com/login", timeout=60000)
 
-        # Wait for login fields
-        page.wait_for_selector("input#username, input[name=username], input[placeholder]", timeout=30000)
+        # --- LOGIN ---
+        page.wait_for_selector('input[placeholder="Email Address / Mobile Number"]', timeout=30000)
+        page.fill('input[placeholder="Email Address / Mobile Number"]', os.getenv("KREDILY_USER"))
+        page.fill('input[placeholder="Password"]', os.getenv("KREDILY_PASS"))
 
-        # fill credentials (try several selectors to be robust)
+        page.click('button[type="submit"]')
+
+        page.wait_for_load_state("networkidle")
+
+        # --- CLOSE ANY POPUP ---
         try:
-            page.fill("#username", KREDILY_USER)
+            page.click("button.close", timeout=3000)
         except:
-            try:
-                page.fill("input[name='username']", KREDILY_USER)
-            except:
-                page.fill("input[placeholder='Email Address / Mobile Number']", KREDILY_USER)
+            pass
 
-        try:
-            page.fill("#password", KREDILY_PASS)
-        except:
-            page.fill("input[placeholder='Password']", KREDILY_PASS)
+        # --- CLOCK-IN / CLOCK-OUT ---
+        if action == "clockin":
+            btn_text = "WEB CLOCK-IN"
+        else:
+            btn_text = "WEB CLOCK-OUT"
 
-        # click Sign In
-        page.click("button:has-text('Sign In')", timeout=10000)
-        page.wait_for_timeout(3000)
+        page.wait_for_selector(f"button:has-text('{btn_text}')", timeout=30000)
+        page.click(f"button:has-text('{btn_text}')")
 
-        # Handle possible popups (best-effort)
-        for sel in ["button:has-text('Yes')", "button:has-text('No')", "button.close", "button[aria-label='close']"]:
-            try:
-                page.click(sel, timeout=2000)
-                page.wait_for_timeout(500)
-            except:
-                pass
-
-        # Wait for dashboard to load
-        page.wait_for_timeout(2000)
-
-        # Depending on action, click relevant button
-        try:
-            if action == "clockin":
-                page.wait_for_selector("button:has-text('WEB CLOCK-IN')", timeout=20000)
-                page.click("button:has-text('WEB CLOCK-IN')")
-                msg = "🟢 Clock-In Successful"
-            else:
-                page.wait_for_selector("button:has-text('WEB CLOCK-OUT')", timeout=20000)
-                page.click("button:has-text('WEB CLOCK-OUT')")
-                msg = "🔵 Clock-Out Successful"
-
-            print(msg)
-            telegram_notify(msg)
-        except Exception as e:
-            err = f"⚠️ Kredily {action} failed: {e}"
-            print(err)
-            telegram_notify(err)
-
+        print(f"{action.upper()} successful ✔")
         browser.close()
 
+
 if __name__ == "__main__":
-    # The script will be called twice by GitHub Actions with different env (see workflow)
-    # Default action is clockin
-    run_once(action=os.getenv("ACTION", "clockin"))
+    action = os.getenv("ACTION")
+    run_once(action)
