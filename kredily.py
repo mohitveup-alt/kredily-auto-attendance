@@ -6,7 +6,7 @@ def run_once(action):
     print("Opening login page...")
 
     with sync_playwright() as p:
-        browser = p.chromium.launch(headless=True)
+        browser = p.firefox.launch(headless=True)
         page = browser.new_page()
 
         page.goto("https://app.kredily.com/login", timeout=60000)
