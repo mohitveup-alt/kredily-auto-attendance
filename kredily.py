@@ -1,73 +1,89 @@
-from selenium import webdriver
-from webdriver_manager.chrome import ChromeDriverManager
-from selenium.webdriver.chrome.service import Service
-from selenium.webdriver.common.by import By
-from selenium.webdriver.support.ui import WebDriverWait
-from selenium.webdriver.support import expected_conditions as EC
-from selenium.webdriver.chrome.options import Options
+# kredily.py
+# Playwright script for Kredily clock-in / clock-out + Telegram notifications
+
+import os
 import time
+import requests
+from playwright.sync_api import sync_playwright
 
-def run_task():
+KREDILY_USER = os.getenv("KREDILY_USER")
+KREDILY_PASS = os.getenv("KREDILY_PASS")
+TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")   # optional
+TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")       # optional
 
-    chrome_options = Options()
-    
-    # --- FIX FOR GITHUB ACTIONS ---
-    chrome_options.add_argument("--headless")  # old headless (more stable)
-    chrome_options.add_argument("--disable-gpu")
-    chrome_options.add_argument("--window-size=1920,1080")
-    chrome_options.add_argument("--no-sandbox")
-    chrome_options.add_argument("--disable-dev-shm-usage")
+LOGIN_URL = "https://app.kredily.com/login"
 
-    service = Service(ChromeDriverManager().install())
-    driver = webdriver.Chrome(service=service, options=chrome_options)
+def telegram_notify(text):
+    if not TELEGRAM_BOT_TOKEN or not TELEGRAM_CHAT_ID:
+        return
+    try:
+        url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
+        requests.post(url, data={"chat_id": TELEGRAM_CHAT_ID, "text": text})
+    except Exception as e:
+        print("Telegram notify failed:", e)
 
-    print("Opening login page...")
-    driver.get("https://app.kredily.com/login")
+def run_once(action="clockin"):
+    with sync_playwright() as p:
+        browser = p.chromium.launch(headless=True)
+        context = browser.new_context()
+        page = context.new_page()
 
-    # --- FIX: WAIT FOR FULL PAGE RENDER ---
-    time.sleep(5)
+        print("Opening login page...")
+        page.goto(LOGIN_URL, timeout=60000)
 
-    # --- FIX: USE PLACEHOLDER SELECTORS ---
-    email = WebDriverWait(driver, 20).until(
-        EC.presence_of_element_located((By.XPATH, "//input[@placeholder='Email Address / Mobile Number']"))
-    )
-    email.send_keys("YOUR_MOBILE_OR_EMAIL")
+        # Wait for login fields
+        page.wait_for_selector("input#username, input[name=username], input[placeholder]", timeout=30000)
 
-    password = driver.find_element(By.XPATH, "//input[@placeholder='Password']")
-    password.send_keys("YOUR_PASSWORD")
-
-    login_btn = driver.find_element(By.XPATH, "//button[contains(text(),'Sign In')]")
-    login_btn.click()
-
-    print("Login submitted, waiting...")
-    time.sleep(6)
-
-    # --- HANDLE POP-UPS ---
-    for xpath in [
-        "//button[contains(text(),'Yes')]",
-        "//button[contains(text(),'No')]",
-        "//button[contains(@class,'close')]",
-    ]:
+        # fill credentials (try several selectors to be robust)
         try:
-            btn = WebDriverWait(driver, 5).until(
-                EC.element_to_be_clickable((By.XPATH, xpath))
-            )
-            btn.click()
-            time.sleep(1)
+            page.fill("#username", KREDILY_USER)
         except:
-            pass
+            try:
+                page.fill("input[name='username']", KREDILY_USER)
+            except:
+                page.fill("input[placeholder='Email Address / Mobile Number']", KREDILY_USER)
 
-    print("Looking for Clock-In button...")
+        try:
+            page.fill("#password", KREDILY_PASS)
+        except:
+            page.fill("input[placeholder='Password']", KREDILY_PASS)
 
-    clockin_btn = WebDriverWait(driver, 25).until(
-        EC.element_to_be_clickable((By.XPATH, "//button[contains(text(),'WEB CLOCK-IN')]"))
-    )
-    clockin_btn.click()
+        # click Sign In
+        page.click("button:has-text('Sign In')", timeout=10000)
+        page.wait_for_timeout(3000)
 
-    print("Clock-in Done Successfully ✔")
+        # Handle possible popups (best-effort)
+        for sel in ["button:has-text('Yes')", "button:has-text('No')", "button.close", "button[aria-label='close']"]:
+            try:
+                page.click(sel, timeout=2000)
+                page.wait_for_timeout(500)
+            except:
+                pass
 
-    driver.quit()
+        # Wait for dashboard to load
+        page.wait_for_timeout(2000)
 
+        # Depending on action, click relevant button
+        try:
+            if action == "clockin":
+                page.wait_for_selector("button:has-text('WEB CLOCK-IN')", timeout=20000)
+                page.click("button:has-text('WEB CLOCK-IN')")
+                msg = "🟢 Clock-In Successful"
+            else:
+                page.wait_for_selector("button:has-text('WEB CLOCK-OUT')", timeout=20000)
+                page.click("button:has-text('WEB CLOCK-OUT')")
+                msg = "🔵 Clock-Out Successful"
+
+            print(msg)
+            telegram_notify(msg)
+        except Exception as e:
+            err = f"⚠️ Kredily {action} failed: {e}"
+            print(err)
+            telegram_notify(err)
+
+        browser.close()
 
 if __name__ == "__main__":
-    run_task()
+    # The script will be called twice by GitHub Actions with different env (see workflow)
+    # Default action is clockin
+    run_once(action=os.getenv("ACTION", "clockin"))
