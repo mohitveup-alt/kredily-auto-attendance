@@ -9,58 +9,57 @@ import time
 
 def run_task():
 
-    # --- CHROME OPTIONS ---
     chrome_options = Options()
-    chrome_options.add_argument("--headless=new")
+    
+    # --- FIX FOR GITHUB ACTIONS ---
+    chrome_options.add_argument("--headless")  # old headless (more stable)
+    chrome_options.add_argument("--disable-gpu")
+    chrome_options.add_argument("--window-size=1920,1080")
     chrome_options.add_argument("--no-sandbox")
     chrome_options.add_argument("--disable-dev-shm-usage")
 
-    # --- FIXED: NEW SELENIUM DRIVER INITIALIZATION ---
     service = Service(ChromeDriverManager().install())
     driver = webdriver.Chrome(service=service, options=chrome_options)
 
+    print("Opening login page...")
     driver.get("https://app.kredily.com/login")
 
-    # --- LOGIN ---
-    email = WebDriverWait(driver, 25).until(
-        EC.presence_of_element_located((By.ID, "username"))
+    # --- FIX: WAIT FOR FULL PAGE RENDER ---
+    time.sleep(5)
+
+    # --- FIX: USE PLACEHOLDER SELECTORS ---
+    email = WebDriverWait(driver, 20).until(
+        EC.presence_of_element_located((By.XPATH, "//input[@placeholder='Email Address / Mobile Number']"))
     )
     email.send_keys("YOUR_MOBILE_OR_EMAIL")
 
-    password = driver.find_element(By.ID, "password")
+    password = driver.find_element(By.XPATH, "//input[@placeholder='Password']")
     password.send_keys("YOUR_PASSWORD")
 
     login_btn = driver.find_element(By.XPATH, "//button[contains(text(),'Sign In')]")
     login_btn.click()
 
-    # Wait for redirect
-    time.sleep(4)
+    print("Login submitted, waiting...")
+    time.sleep(6)
 
-    # --- HANDLE HEALTH INSURANCE POP-UP (OPTIONAL) ---
-    try:
-        yes_btn = WebDriverWait(driver, 5).until(
-            EC.element_to_be_clickable((By.XPATH, "//button[contains(text(),'Yes')]"))
-        )
-        yes_btn.click()
-    except:
-        pass
+    # --- HANDLE POP-UPS ---
+    for xpath in [
+        "//button[contains(text(),'Yes')]",
+        "//button[contains(text(),'No')]",
+        "//button[contains(@class,'close')]",
+    ]:
+        try:
+            btn = WebDriverWait(driver, 5).until(
+                EC.element_to_be_clickable((By.XPATH, xpath))
+            )
+            btn.click()
+            time.sleep(1)
+        except:
+            pass
 
-    # Also close any other purple popups
-    try:
-        close_btn = WebDriverWait(driver, 5).until(
-            EC.element_to_be_clickable((By.XPATH, "//button[contains(@class,'close')]"))
-        )
-        close_btn.click()
-    except:
-        pass
+    print("Looking for Clock-In button...")
 
-    # --- WAIT FOR DASHBOARD ---
-    WebDriverWait(driver, 20).until(
-        EC.presence_of_element_located((By.XPATH, "//h1[contains(text(),'Hi')]"))
-    )
-
-    # --- CLOCK-IN BUTTON ---
-    clockin_btn = WebDriverWait(driver, 20).until(
+    clockin_btn = WebDriverWait(driver, 25).until(
         EC.element_to_be_clickable((By.XPATH, "//button[contains(text(),'WEB CLOCK-IN')]"))
     )
     clockin_btn.click()
@@ -68,6 +67,7 @@ def run_task():
     print("Clock-in Done Successfully ✔")
 
     driver.quit()
+
 
 if __name__ == "__main__":
     run_task()
